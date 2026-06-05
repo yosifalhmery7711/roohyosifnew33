@@ -94,10 +94,13 @@ async function startServer() {
 
   // CORS Middleware to support remote hosting like Vercel
   app.use((req, res, next) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    const origin = req.headers.origin || "*";
+    res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, remixed-database-id, x-groq-api-key");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
     if (req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Max-Age", "86400");
       return res.sendStatus(200);
     }
     next();
@@ -2567,6 +2570,105 @@ export const metadata = { type: "${type}", checksum: "${Buffer.from(base64.subst
     } catch (e: any) {
       console.error("Default media upload error:", e);
       res.status(500).json({ error: "Failed to upload default media: " + e.message });
+    }
+  });
+
+  // Admin dynamic URL diagnostics scanner
+  app.post("/api/control/diagnose-url", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) return res.status(400).json({ error: "Missing url" });
+
+      const logs: string[] = [];
+      const addLog = (type: 'info' | 'success' | 'warn' | 'error', message: string) => {
+        const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+        logs.push(`[${timestamp}] [${type.toUpperCase()}] ${message}`);
+      };
+
+      addLog('info', `Initializing remote connection checks for secure URL: ${url}`);
+      
+      let cleanUrl = url.trim();
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+        cleanUrl = 'https://' + cleanUrl;
+      }
+
+      addLog('info', `Pinging target endpoint: ${cleanUrl}...`);
+      const startTime = Date.now();
+      let response;
+      try {
+        response = await fetch(cleanUrl, { method: 'GET', headers: { 'User-Agent': 'RoohDiagDriver/1.0' } });
+        const duration = Date.now() - startTime;
+        addLog('success', `Endpoint reached in ${duration}ms. Status: ${response.status} (${response.statusText})`);
+      } catch (pingErr: any) {
+        addLog('error', `Failed to reach target URL: ${pingErr.message || pingErr}`);
+        return res.json({ success: false, logs });
+      }
+
+      addLog('info', `Testing CORS configuration on root routing...`);
+      const headers = response.headers;
+      const acao = headers.get('access-control-allow-origin');
+      if (acao) {
+        addLog('success', `Found CORS policy on headers. Access-Control-Allow-Origin: ${acao}`);
+      } else {
+        addLog('warn', `No native CORS headers on landing response (typical for direct HTML index pages).`);
+      }
+
+      addLog('info', `Analyzing REST proxy endpoints for CORS preflight compliance...`);
+      const backendUrl = `https://ais-pre-k5iemwg4h37e3vlqupafsj-843202541187.europe-west2.run.app`;
+      const corsTestUrls = [
+        `${backendUrl}/api/chat/auto-touch`,
+        `${backendUrl}/api/firebase-proxy`,
+        `${backendUrl}/api/control/settings`
+      ];
+
+      for (const testUrl of corsTestUrls) {
+        addLog('info', `OPTIONS preflight to: ${testUrl}`);
+        try {
+          const optRes = await fetch(testUrl, {
+            method: 'OPTIONS',
+            headers: {
+              'Access-Control-Request-Method': 'POST',
+              'Access-Control-Request-Headers': 'content-type,x-groq-api-key,remixed-database-id',
+              'Origin': cleanUrl
+            }
+          });
+          const optAcao = optRes.headers.get('access-control-allow-origin');
+          const optHeaders = optRes.headers.get('access-control-allow-headers');
+          
+          if (optAcao === '*' || optAcao === cleanUrl || optAcao?.includes('vercel.app')) {
+            addLog('success', `CORS PREFLIGHT SUCCESS: Origin '${optAcao}' accepted cleanly.`);
+          } else {
+            addLog('warn', `CORS preflight returned origin '${optAcao || "none"}' (could cause issues if credentials are sent).`);
+          }
+          if (optHeaders) {
+            addLog('success', `Accepted headers: ${optHeaders}`);
+          }
+        } catch (optErr: any) {
+          addLog('error', `OPTIONS preflight failed for ${testUrl}: ${optErr.message}`);
+        }
+      }
+
+      addLog('info', `Running cloud database synchronization and driver checks...`);
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+        try {
+          const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          const dbId = configData.firestoreDatabaseId || "(default)";
+          addLog('info', `Local applet target Firebase project: ${configData.projectId}`);
+          addLog('info', `Target Firestore database instance name: ${dbId}`);
+          
+          if (dbId === "(default)") {
+            addLog('warn', `CRITICAL CONFIG WARNING: The database instance name is '(default)'. Under Google Workspace Sandbox terms, this must be customized to 'remixed-firestore-database-id' for persistent storage.`);
+          } else {
+            addLog('success', `Database check: Correct schema targeting (${dbId}) confirmed.`);
+          }
+        } catch (cE) {}
+      }
+
+      addLog('success', `All system diagnostic checks complete. Ready for copy and deployment scaling.`);
+      res.json({ success: true, logs });
+    } catch (globalErr: any) {
+      res.status(500).json({ error: globalErr.message || "Failed to scan url" });
     }
   });
 

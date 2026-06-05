@@ -131,7 +131,7 @@ const isUrlOrUri = configuredDbId.includes("://") || configuredDbId.includes("/"
 
 export const dbIdToUse = (configuredDbId && !isUrlOrUri)
   ? configuredDbId
-  : (isVercelOrExternal ? "" : (firebaseAppletConfig.firestoreDatabaseId || ""));
+  : (firebaseAppletConfig.firestoreDatabaseId || "");
 
 // Initialize Firestore with extreme resilience options:
 // 1. Force Long Polling (experimentalForceLongPolling: true) to bypass VPN/proxy WebSocket restrictions
