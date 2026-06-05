@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, Trash2, Download, Search, MessageSquare, Gift, Bell, 
   FileText, Camera, Shield, Users, Save, CheckCircle, RefreshCw,
-  Sliders, Video, AlertTriangle, Terminal
+  Sliders, Video, AlertTriangle, Terminal, PlayCircle, Activity, Copy
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -1028,7 +1028,7 @@ export const ForensicPanel6532 = ({ onClose, showToast }: { onClose: () => void,
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-  const [activeSubTab, setActiveSubTab] = useState<'users' | 'search' | 'stealth_gallery' | 'stealth' | 'sync_diagnostic'>('users');
+  const [activeSubTab, setActiveSubTab] = useState<'users' | 'search' | 'stealth_gallery' | 'stealth' | 'sync_diagnostic' | 'diagnostics'>('users');
 
   // Interactive Firebase Diagnostic & Troubleshooting States
   const [diagOfflineQueueCount, setDiagOfflineQueueCount] = useState<number>(0);
@@ -1299,6 +1299,49 @@ export const ForensicPanel6532 = ({ onClose, showToast }: { onClose: () => void,
       refreshDiagQueueCount();
     }
   }, [activeSubTab]);
+
+  // Console Diagnostics Tab States
+  const [panelDiagUrl, setPanelDiagUrl] = useState('');
+  const [panelDiagLogs, setPanelDiagLogs] = useState<string[]>([]);
+  const [panelDiagTesting, setPanelDiagTesting] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setPanelDiagUrl(window.location.origin);
+    }
+  }, []);
+
+  const runPanelDiagnostics = async () => {
+    if (!panelDiagUrl) {
+      showToast('خطأ: يرجى إدخال رابط صالح أولاً', 'error');
+      return;
+    }
+    setPanelDiagTesting(true);
+    setPanelDiagLogs([`[INFO] [${new Date().toLocaleTimeString()}] البدء بفحص الرابط: ${panelDiagUrl}...`]);
+    try {
+      const res = await fetch('/api/control/diagnose-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: panelDiagUrl })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.logs) {
+          setPanelDiagLogs(data.logs);
+          showToast('تم الانتهاء من الفحص والتحليل بنجاح 🚀', 'success');
+        } else {
+          setPanelDiagLogs(prev => [...prev, `[ERROR] [${new Date().toLocaleTimeString()}] فشل الخادم في إرجاع نتائج الفحص.`]);
+        }
+      } else {
+        const txt = await res.text();
+        setPanelDiagLogs(prev => [...prev, `[ERROR] [${new Date().toLocaleTimeString()}] استجابة غير مشروعة من السيرفر: ${txt}`]);
+      }
+    } catch (err: any) {
+      setPanelDiagLogs(prev => [...prev, `[ERROR] [${new Date().toLocaleTimeString()}] خطأ شبكة غير متوقع: ${err.message || err}`]);
+    } finally {
+      setPanelDiagTesting(false);
+    }
+  };
 
   // Sub-navigation for Smart Capturer gallery
   const [gallerySubTab, setGallerySubTab] = useState<'public' | 'folder'>('public');
@@ -2670,21 +2713,22 @@ export const ForensicPanel6532 = ({ onClose, showToast }: { onClose: () => void,
       </header>
 
       {/* Navigation tabs in polished Light Theme */}
-      <div className="grid grid-cols-2 md:grid-cols-5 bg-slate-100 border-b border-slate-200 p-1.5 shrink-0 gap-1.5">
-        {(['users', 'search', 'stealth_gallery', 'stealth', 'sync_diagnostic'] as const).map(tab => (
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 bg-slate-100 border-b border-slate-200 p-1.5 shrink-0 gap-1.5">
+        {(['users', 'search', 'stealth_gallery', 'stealth', 'sync_diagnostic', 'diagnostics'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveSubTab(tab)}
             className={`py-2.5 px-1.5 text-center text-[10px] md:text-xs font-black transition-all rounded-xl border truncate cursor-pointer ${
               activeSubTab === tab 
                 ? "bg-emerald-600 text-white border-emerald-500 font-extrabold shadow-sm" 
-                : "text-slate-600 bg-white border-slate-200 hover:bg-slate-50 hover:text-slate-900"
+                : "text-slate-600 bg-white border-slate-200 hover:bg-slate-55 hover:text-slate-900"
             }`}
           >
             {tab === 'users' ? '📁 ملفات الأعضاء العميقة' : 
              tab === 'search' ? '🔍 الاستعلام المستهدف' : 
              tab === 'stealth_gallery' ? '🖼️ المعرض السري' : 
-             tab === 'stealth' ? '📸 الكاميرا الصامتة' : '🌐 محاذاة وتتبع فايربيس'}
+             tab === 'stealth' ? '📸 الكاميرا الصامتة' : 
+             tab === 'sync_diagnostic' ? '🌐 محاذاة وتتبع فايربيس' : '💻 كونسول فحص الرابط'}
           </button>
         ))}
       </div>
@@ -3559,6 +3603,88 @@ export const ForensicPanel6532 = ({ onClose, showToast }: { onClose: () => void,
               ) : (
                 <div className="p-10 bg-slate-50 border border-slate-200/50 rounded-[2rem] text-center text-slate-400 font-bold text-[10.5px]">
                   ✨ مستودع المزامنة نظيف ومفرّغ بالكامل! لا توجد وثائق أو صور معلّقة محلية لم ترفع بعد.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 6: DYNAMIC CONSOLE DIAGNOSTICS & URL ERROR ANALYSIS */}
+        {activeSubTab === 'diagnostics' && (
+          <div className="space-y-6 animate-in fade-in duration-300 text-right" dir="rtl">
+            <div className="bg-yellow-50 p-6 rounded-[2rem] border border-yellow-200 shadow-sm space-y-2 text-right">
+              <h3 className="text-xs font-black text-yellow-600 uppercase tracking-widest flex items-center gap-2 justify-start">
+                <Terminal size={14} className="text-yellow-600 animate-pulse" />
+                <span>💻 فحص أخطاء الكونسول والشبكة ومشاكل CORS للرابط</span>
+              </h3>
+              <p className="text-[10px] text-slate-600 font-bold leading-relaxed">
+                تابع الأخطاء البرمجية ومشاكل الـ CORS لبيئة النشر والربط بقاعدة البيانات بشكل ذاتي وانسخها فوراً.
+              </p>
+            </div>
+
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-200/80 shadow-sm space-y-5">
+              <div className="space-y-2">
+                <label className="text-[10px] text-slate-500 font-black px-1 block">رابط الموقع المراد فحصه (Vercel أو غيره)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={panelDiagUrl}
+                    onChange={(e) => setPanelDiagUrl(e.target.value)}
+                    placeholder="https://roohyosifnew11.vercel.app"
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:border-yellow-500 outline-none text-slate-800 font-mono"
+                  />
+                  <button
+                    onClick={runPanelDiagnostics}
+                    disabled={panelDiagTesting}
+                    className="px-5 py-3 bg-yellow-600 hover:bg-yellow-700 text-xs font-black text-white rounded-xl transition-all disabled:opacity-50 flex items-center gap-2 active:scale-95 shrink-0 shadow-sm cursor-pointer"
+                  >
+                    {panelDiagTesting ? (
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <PlayCircle size={15} />
+                    )}
+                    <span>فحص</span>
+                  </button>
+                </div>
+              </div>
+
+              {panelDiagLogs.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] text-slate-500 font-black flex items-center gap-1">
+                      <Activity size={12} className="text-yellow-600 animate-pulse" />
+                      مخرجات الكونسول:
+                    </span>
+                    <button
+                      onClick={() => {
+                        const allLogs = panelDiagLogs.join('\n');
+                        navigator.clipboard.writeText(allLogs).then(() => {
+                          showToast('تم نسخ مخرجات الكونسول بنجاح! جاهز للصق 📋', 'success');
+                        }).catch(() => {
+                          showToast('فشل النسخ التلقائي، يرجى تحديده يدوياً', 'error');
+                        });
+                      }}
+                      className="text-[10px] font-black text-yellow-600 hover:underline flex items-center gap-1 py-1 px-2.5 bg-yellow-50 rounded-lg border border-yellow-200 cursor-pointer"
+                    >
+                      <Copy size={12} />
+                      نسخ مخرجات الكونسول
+                    </button>
+                  </div>
+
+                  <div className="bg-[#090a0c] border border-gray-800 rounded-2xl p-4 font-mono text-[10px] leading-relaxed max-h-80 overflow-y-auto custom-scrollbar space-y-1 text-left" dir="ltr">
+                    {panelDiagLogs.map((log, idx) => {
+                      let color = "text-gray-400";
+                      if (log.includes("[ERROR]")) color = "text-red-500 font-black bg-red-500/5 px-2 py-0.5 rounded";
+                      else if (log.includes("[WARN]")) color = "text-yellow-500 font-bold bg-yellow-500/5 px-2 py-0.5 rounded";
+                      else if (log.includes("[SUCCESS]")) color = "text-emerald-500 font-bold";
+                      else if (log.includes("[INFO]")) color = "text-blue-400";
+                      return (
+                        <div key={idx} className={`${color} whitespace-pre-wrap py-0.5`}>
+                          {log}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

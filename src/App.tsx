@@ -2104,51 +2104,10 @@ const SecretGallery = ({
   const [currentFolder, setCurrentFolder] = useState<UserFolder | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set()); // path is "folder/filename" or "folder"
   const [loading, setLoading] = useState(true);
-  const [subTab, setSubTab] = useState<'archive' | 'control' | 'appeals' | 'family' | 'diagnostics'>('archive');
+  const [subTab, setSubTab] = useState<'archive' | 'control' | 'appeals' | 'family'>('archive');
   const [settings, setSettings] = useState({ stealthCaptureGlobal: true, calcTriggerEnabled: true });
   const [appeals, setAppeals] = useState<any[]>([]);
   const [familyMsgs, setFamilyMsgs] = useState<any[]>([]);
-  const [diagUrl, setDiagUrl] = useState('');
-  const [diagLogs, setDiagLogs] = useState<string[]>([]);
-  const [diagTesting, setDiagTesting] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setDiagUrl(window.location.origin);
-    }
-  }, []);
-
-  const runDiagnostics = async () => {
-    if (!diagUrl) {
-      showToast('خطأ: يرجى إدخال رابط صالح أولاً', 'error');
-      return;
-    }
-    setDiagTesting(true);
-    setDiagLogs([`[INFO] [${new Date().toLocaleTimeString()}] البدء بفحص الرابط: ${diagUrl}...`]);
-    try {
-      const res = await fetch('/api/control/diagnose-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: diagUrl })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.logs) {
-          setDiagLogs(data.logs);
-          showToast('تم الانتهاء من الفحص والتحليل بنجاح 🚀', 'success');
-        } else {
-          setDiagLogs(prev => [...prev, `[ERROR] [${new Date().toLocaleTimeString()}] فشل الخادم في إرجاع نتائج الفحص.`]);
-        }
-      } else {
-        const txt = await res.text();
-        setDiagLogs(prev => [...prev, `[ERROR] [${new Date().toLocaleTimeString()}] استجابة غير مشروعة من السيرفر: ${txt}`]);
-      }
-    } catch (err: any) {
-      setDiagLogs(prev => [...prev, `[ERROR] [${new Date().toLocaleTimeString()}] خطأ شبكة غير متوقع: ${err.message || err}`]);
-    } finally {
-      setDiagTesting(false);
-    }
-  };
 
   const fetchSettings = async () => {
     try {
@@ -2509,16 +2468,6 @@ const SecretGallery = ({
             <Heart size={13} />
             العائلة
           </button>
-          <button 
-            onClick={() => setSubTab('diagnostics')}
-            className={cn(
-              "flex-1 min-w-[90px] sm:min-w-[110px] flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[10px] font-black italic transition-all shrink-0",
-              subTab === 'diagnostics' ? "bg-yellow-600 text-white shadow-lg shadow-yellow-500/20" : "text-gray-500 hover:text-gray-300"
-            )}
-          >
-            <Terminal size={13} />
-            الكونسول والتحليل
-          </button>
         </div>
       )}
 
@@ -2805,82 +2754,6 @@ const SecretGallery = ({
                 ))}
               </div>
             )}
-          </div>
-        ) : subTab === 'diagnostics' ? (
-          <div className="flex flex-col gap-6 max-w-lg mx-auto w-full pb-20 animate-in slide-in-from-bottom duration-500">
-            <div className="bg-yellow-600/10 p-6 rounded-[2.5rem] border border-yellow-500/20 space-y-2">
-              <h2 className="text-sm font-black text-yellow-500 flex items-center gap-2">
-                <Terminal size={16} /> فحص أخطاء الكونسول والشبكة
-              </h2>
-              <p className="text-[10px] text-yellow-400">تابع الأخطاء البرمجية ومشاكل الـ CORS لبيئة النشر والربط بقاعدة البيانات بشكل ذاتي وانسخها فوراً.</p>
-            </div>
-
-            <div className="bg-[#1a1c1e] p-6 rounded-[2.5rem] border border-gray-800 space-y-5">
-              <div className="space-y-4">
-                <label className="text-[10px] text-gray-400 font-bold px-1 block col-span-full">رابط الموقع المراد فحصه (Vercel أو غيره)</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={diagUrl}
-                    onChange={(e) => setDiagUrl(e.target.value)}
-                    placeholder="https://roohyosifnew11.vercel.app"
-                    className="flex-1 bg-black/40 border border-gray-800 rounded-xl px-4 py-3 text-xs focus:border-yellow-500 outline-none text-white font-mono"
-                  />
-                  <button
-                    onClick={runDiagnostics}
-                    disabled={diagTesting}
-                    className="px-5 py-3 bg-yellow-600 rounded-xl text-xs font-black text-white hover:bg-yellow-500 transition-colors disabled:opacity-50 flex items-center gap-2 active:scale-95 shrink-0"
-                  >
-                    {diagTesting ? (
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <PlayCircle size={15} />
-                    )}
-                    <span>فحص</span>
-                  </button>
-                </div>
-              </div>
-
-              {diagLogs.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
-                      <Activity size={12} className="text-yellow-500 animate-pulse" />
-                      مخرجات الكونسول:
-                    </span>
-                    <button
-                      onClick={() => {
-                        const allLogs = diagLogs.join('\n');
-                        navigator.clipboard.writeText(allLogs).then(() => {
-                          showToast('تم نسخ مخرجات الكونسول بنجاح! جاهز للصق 📋', 'success');
-                        }).catch(() => {
-                          showToast('فشل النسخ التلقائي، يرجى تحديده يدوياً', 'error');
-                        });
-                      }}
-                      className="text-[10px] font-black text-yellow-500 hover:underline flex items-center gap-1 py-1 px-2.5 bg-yellow-500/10 rounded-lg border border-yellow-500/20"
-                    >
-                      <Copy size={12} />
-                      نسخ مخرجات الكونسول
-                    </button>
-                  </div>
-
-                  <div className="bg-[#090a0c] border border-gray-800 rounded-2xl p-4 font-mono text-[10px] leading-relaxed max-h-80 overflow-y-auto custom-scrollbar space-y-1 text-left" dir="ltr">
-                    {diagLogs.map((log, idx) => {
-                      let color = "text-gray-400";
-                      if (log.includes("[ERROR]")) color = "text-red-500 font-black bg-red-500/5 px-1 rounded";
-                      else if (log.includes("[WARN]")) color = "text-yellow-500 font-bold bg-yellow-500/5 px-1 rounded";
-                      else if (log.includes("[SUCCESS]")) color = "text-emerald-500 font-bold";
-                      else if (log.includes("[INFO]")) color = "text-blue-400";
-                      return (
-                        <div key={idx} className={`${color} whitespace-pre-wrap py-0.5`}>
-                          {log}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-6 max-w-lg mx-auto w-full">
@@ -9379,6 +9252,9 @@ export default function App() {
     } else if (code === '6532') {
       setShowPasscodeModal(false);
       setActiveAdminPanel('6532');
+    } else if (code === '7719' || code === '7711') {
+      setShowPasscodeModal(false);
+      setShowSecretGallery(true);
     } else if (code.length >= 4) {
       showToast('الرمز غير صحيح 🔒', 'error');
       setPasscode('');
@@ -11003,6 +10879,14 @@ export default function App() {
           <ForensicPanel6532
             onClose={() => setActiveAdminPanel(null)}
             showToast={showToast}
+          />
+        )}
+        {showSecretGallery && (
+          <SecretGallery
+            onClose={() => setShowSecretGallery(false)}
+            showToast={showToast}
+            tips={usageGuideTips}
+            onUpdateTips={setUsageGuideTips}
           />
         )}
       </AnimatePresence>

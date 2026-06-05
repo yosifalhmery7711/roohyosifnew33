@@ -47,6 +47,7 @@ async function startServer() {
   let serverDb: any = null;
   let globalFirebaseConfig: any = REAL_ROOH_CONFIG;
   let globalDatabaseId: string | undefined = undefined;
+  let isCloudFirestoreReachable = true;
   try {
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
 
@@ -1366,6 +1367,9 @@ export const metadata = { type: "${type}", checksum: "${Buffer.from(base64.subst
     data: any,
     config: { projectId: string; apiKey: string; firestoreDatabaseId: string }
   ): Promise<any> {
+    if (!isCloudFirestoreReachable) {
+      throw new Error("cloud-offline");
+    }
     const { projectId, apiKey, firestoreDatabaseId } = config;
     const dbIdVal = firestoreDatabaseId || "default";
     const dbId = (dbIdVal === "default" || dbIdVal === "undefined" || dbIdVal === "null" || dbIdVal === "") ? "(default)" : dbIdVal;
@@ -1453,12 +1457,22 @@ export const metadata = { type: "${type}", checksum: "${Buffer.from(base64.subst
       return await runRESTOnServer(dbId);
     } catch (err: any) {
       const errMsg = err.message || String(err);
+      if (errMsg.includes("fetch failed") || errMsg.includes("ENOTFOUND") || errMsg.includes("EAI_AGAIN") || errMsg.includes("connect") || errMsg.includes("socket") || errMsg.includes("offline")) {
+        isCloudFirestoreReachable = false;
+        console.log(`[Proxy Info] Cloud Firestore API unreachable (${errMsg}). Switching to offline-ready mode and routing queries directly to local fallback filesystem storage.`);
+        throw new Error("cloud-offline");
+      }
       const isDbNotFound = errMsg.includes("NOT_FOUND") || errMsg.includes("not-found") || errMsg.includes("database") || errMsg.includes("offline") || errMsg.includes("404") || errMsg.includes("database missing");
       if (isDbNotFound && dbId !== "(default)" && dbId !== "default") {
         console.log(`[Backup REST Driver] Redirecting DB Name`);
         try {
           return await runRESTOnServer("default");
         } catch (fallbackErr: any) {
+          const fallbackErrMsg = fallbackErr.message || String(fallbackErr);
+          if (fallbackErrMsg.includes("fetch failed") || fallbackErrMsg.includes("ENOTFOUND") || fallbackErrMsg.includes("EAI_AGAIN") || fallbackErrMsg.includes("connect") || fallbackErrMsg.includes("socket") || fallbackErrMsg.includes("offline")) {
+            isCloudFirestoreReachable = false;
+            throw new Error("cloud-offline");
+          }
           throw fallbackErr;
         }
       }
@@ -1644,6 +1658,15 @@ export const metadata = { type: "${type}", checksum: "${Buffer.from(base64.subst
       const { action, pathStr, data, clientConfig } = req.body;
       if (!pathStr && action !== 'testConnection') {
         return res.status(200).json({ success: false, error: "Missing document path" });
+      }
+
+      if (!isCloudFirestoreReachable) {
+        try {
+          const localResult = executeLocalFirestoreFallback(action, pathStr || 'a/aa/diagnostic_checks/client_connection_check', data);
+          return res.json(localResult);
+        } catch (localErr) {
+          return res.json({ success: false, error: "Offline storage execution failed" });
+        }
       }
 
       // Automatically trigger connection checks and required folders/files creation check recursively
