@@ -34,7 +34,7 @@ try {
                           !window.location.hostname.includes('127.0.0.1') && 
                           !window.location.hostname.includes('.run.app'));
 
-        const backendBase = 'https://ais-pre-7wda5scnznd4bea77v3tw4-365000381785.europe-west1.run.app';
+        const backendBase = import.meta.env.VITE_BACKEND_URL || 'https://ais-pre-k5iemwg4h37e3vlqupafsj-843202541187.europe-west2.run.app';
         const absoluteUrl = `${backendBase}${url}`;
 
         if (isVercel) {
